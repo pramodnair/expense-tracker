@@ -12,6 +12,49 @@ class NovaDatabaseHelper(context: Context) :
 
     private val prefs = context.getSharedPreferences("nova_prefs", Context.MODE_PRIVATE)
 
+    init {
+        try {
+            val personalJson = BuildConfig.PERSONAL_RULES_JSON
+            if (personalJson.isNotEmpty()) {
+                val db = this.writableDatabase
+                val cardConfigs = getAllCardConfigs()
+                val isOnlyDummyCard = cardConfigs.size == 1 && cardConfigs[0].lastDigits == "1234"
+                
+                val accountConfigs = getAllAccountConfigs()
+                val isOnlyDummyAccount = accountConfigs.size == 1 && accountConfigs[0].lastDigits == "5678"
+                
+                if (isOnlyDummyCard || isOnlyDummyAccount || (cardConfigs.isEmpty() && accountConfigs.isEmpty())) {
+                    db.delete(TABLE_CARDS, null, null)
+                    db.delete(TABLE_ACCOUNTS, null, null)
+                    
+                    val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                    val rules = json.decodeFromString<PersonalRules>(personalJson)
+                    
+                    for (card in rules.cards) {
+                        val values = ContentValues().apply {
+                            put(COL_CFG_NAME, card.cardName)
+                            put(COL_CFG_LAST_DIGITS, card.lastDigits)
+                            put(COL_CFG_KEYWORDS, card.keywords.lowercase())
+                            put(COL_CFG_BILLING_CYCLE_DAY, card.billingCycleDay)
+                        }
+                        db.insert(TABLE_CARDS, null, values)
+                    }
+
+                    for (acc in rules.accounts) {
+                        val values = ContentValues().apply {
+                            put(COL_CFG_NAME, acc.accountName)
+                            put(COL_CFG_LAST_DIGITS, acc.lastDigits)
+                            put(COL_CFG_KEYWORDS, acc.keywords.lowercase())
+                        }
+                        db.insert(TABLE_ACCOUNTS, null, values)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     companion object {
         private const val DATABASE_NAME = "novabudget.db"
         private const val DATABASE_VERSION = 2

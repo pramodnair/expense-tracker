@@ -1,5 +1,6 @@
 package com.example.novabudget.data
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -19,6 +20,7 @@ data class Transaction(
 @Serializable
 data class CardConfig(
     val id: Long = 0,
+    @SerialName("name")
     val cardName: String,
     val lastDigits: String,
     val keywords: String,
@@ -28,7 +30,9 @@ data class CardConfig(
 @Serializable
 data class AccountConfig(
     val id: Long = 0,
+    @SerialName("name")
     val accountName: String,
     val lastDigits: String,
     val keywords: String
 )
+
