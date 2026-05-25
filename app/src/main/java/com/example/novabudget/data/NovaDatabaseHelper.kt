@@ -81,15 +81,15 @@ class NovaDatabaseHelper(context: Context) :
         """.trimIndent()
         db.execSQL(createAccountsTable)
 
-        // Insert some default configs for out-of-the-box usability based on user sample data!
+        // Insert some default configs for out-of-the-box usability!
         db.execSQL("""
             INSERT INTO $TABLE_CARDS ($COL_CFG_NAME, $COL_CFG_LAST_DIGITS, $COL_CFG_KEYWORDS, $COL_CFG_BILLING_CYCLE_DAY) 
-            VALUES ('ICICI Credit Card', '6005', 'spent,debited,charged', 0)
+            VALUES ('Dummy Credit Card', '1234', 'spent,debited,charged', 0)
         """.trimIndent())
 
         db.execSQL("""
             INSERT INTO $TABLE_ACCOUNTS ($COL_CFG_NAME, $COL_CFG_LAST_DIGITS, $COL_CFG_KEYWORDS) 
-            VALUES ('Axis Bank Account', '9202', 'debited')
+            VALUES ('Dummy Bank Account', '5678', 'debited')
         """.trimIndent())
     }
 

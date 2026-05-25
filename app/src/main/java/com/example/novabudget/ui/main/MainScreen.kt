@@ -1357,7 +1357,7 @@ fun ConfigScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewModel
                     TextField(
                         value = newCardName,
                         onValueChange = { newCardName = it },
-                        label = { Text("Card Label (e.g. ICICI Card)") },
+                        label = { Text("Card Label (e.g. Primary Card)") },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = DarkBackground,
                             unfocusedContainerColor = DarkBackground,
@@ -1374,7 +1374,7 @@ fun ConfigScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewModel
                         TextField(
                             value = newCardDigits,
                             onValueChange = { newCardDigits = it },
-                            label = { Text("Last Digits (e.g. 6005)") },
+                            label = { Text("Last Digits (e.g. 1234)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = DarkBackground,
@@ -1509,7 +1509,7 @@ fun ConfigScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewModel
                     TextField(
                         value = newAccountName,
                         onValueChange = { newAccountName = it },
-                        label = { Text("Account Label (e.g. Axis Savings)") },
+                        label = { Text("Account Label (e.g. Primary Savings)") },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = DarkBackground,
                             unfocusedContainerColor = DarkBackground,
@@ -1526,7 +1526,7 @@ fun ConfigScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewModel
                         TextField(
                             value = newAccountDigits,
                             onValueChange = { newAccountDigits = it },
-                            label = { Text("Last Digits (e.g. 9202)") },
+                            label = { Text("Last Digits (e.g. 5678)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = DarkBackground,
