@@ -24,6 +24,9 @@ interface DataRepository {
     val selectedMonth: Flow<String>
     val distinctMonths: Flow<List<String>>
 
+    val subscriptions: Flow<List<Subscription>>
+    val suggestedSubscriptions: Flow<List<Subscription>>
+
     fun refresh()
     fun setSelectedMonth(yearMonth: String)
     fun addTransaction(tx: Transaction): Boolean
@@ -51,6 +54,11 @@ interface DataRepository {
     fun addAccountConfig(name: String, lastDigits: String, keywords: String): Boolean
     fun deleteAccountConfig(id: Long)
     fun updateAccountConfig(id: Long, name: String, lastDigits: String, keywords: String): Boolean
+
+    fun addSubscription(sub: Subscription): Boolean
+    fun deleteSubscription(id: Long)
+    fun updateSubscription(sub: Subscription): Boolean
+    fun detectSubscriptions(): List<Subscription>
 }
 
 class DefaultDataRepository(private val context: Context) : DataRepository {
@@ -88,6 +96,12 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     private val _incomeDay = MutableStateFlow(30)
     override val incomeDay: Flow<Int> = _incomeDay.asStateFlow()
+
+    private val _subscriptions = MutableStateFlow<List<Subscription>>(emptyList())
+    override val subscriptions: Flow<List<Subscription>> = _subscriptions.asStateFlow()
+
+    private val _suggestedSubscriptions = MutableStateFlow<List<Subscription>>(emptyList())
+    override val suggestedSubscriptions: Flow<List<Subscription>> = _suggestedSubscriptions.asStateFlow()
 
     companion object {
         @Volatile
@@ -143,6 +157,8 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         _startingBalance.value = dbHelper.getStartingBalance()
         _monthlyIncome.value = dbHelper.getMonthlyIncome()
         _incomeDay.value = dbHelper.getIncomeDay()
+        _subscriptions.value = dbHelper.getAllSubscriptions()
+        _suggestedSubscriptions.value = dbHelper.detectSubscriptions()
 
         val monthsSet = mutableSetOf<String>()
         val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
@@ -257,5 +273,45 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
             refresh()
         }
         return success
+    }
+
+    override fun addSubscription(sub: Subscription): Boolean {
+        val success = dbHelper.addSubscription(sub)
+        if (success) {
+            val allSubs = dbHelper.getAllSubscriptions()
+            val insertedSub = allSubs.firstOrNull { it.name == sub.name && it.amount == sub.amount }
+            if (insertedSub != null) {
+                SubscriptionAlarmScheduler(context).scheduleAlarm(insertedSub)
+            }
+            refresh()
+        }
+        return success
+    }
+
+    override fun deleteSubscription(id: Long) {
+        val sub = dbHelper.getAllSubscriptions().firstOrNull { it.id == id }
+        if (sub != null) {
+            SubscriptionAlarmScheduler(context).cancelAlarm(sub)
+        }
+        dbHelper.deleteSubscription(id)
+        refresh()
+    }
+
+    override fun updateSubscription(sub: Subscription): Boolean {
+        val success = dbHelper.updateSubscription(sub)
+        if (success) {
+            val scheduler = SubscriptionAlarmScheduler(context)
+            if (sub.isReminderEnabled == 1) {
+                scheduler.scheduleAlarm(sub)
+            } else {
+                scheduler.cancelAlarm(sub)
+            }
+            refresh()
+        }
+        return success
+    }
+
+    override fun detectSubscriptions(): List<Subscription> {
+        return dbHelper.detectSubscriptions()
     }
 }

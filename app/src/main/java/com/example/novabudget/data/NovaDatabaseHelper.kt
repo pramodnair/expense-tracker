@@ -57,12 +57,13 @@ class NovaDatabaseHelper(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "novabudget.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         // Tables
         const val TABLE_TRANSACTIONS = "transactions"
         const val TABLE_CARDS = "card_configs"
         const val TABLE_ACCOUNTS = "account_configs"
+        const val TABLE_SUBSCRIPTIONS = "subscriptions"
 
         // Transactions Columns
         const val COL_TX_ID = "id"
@@ -82,6 +83,15 @@ class NovaDatabaseHelper(context: Context) :
         const val COL_CFG_LAST_DIGITS = "last_digits"
         const val COL_CFG_KEYWORDS = "keywords"
         const val COL_CFG_BILLING_CYCLE_DAY = "billing_cycle_day"
+
+        // Subscriptions Columns
+        const val COL_SUB_ID = "id"
+        const val COL_SUB_NAME = "name"
+        const val COL_SUB_AMOUNT = "amount"
+        const val COL_SUB_CYCLE = "billing_cycle"
+        const val COL_SUB_RENEWAL = "next_renewal_date"
+        const val COL_SUB_REMINDER = "is_reminder_enabled"
+        const val COL_SUB_AUTO = "is_auto_detected"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -124,6 +134,20 @@ class NovaDatabaseHelper(context: Context) :
             )
         """.trimIndent()
         db.execSQL(createAccountsTable)
+
+        // Subscriptions Table
+        val createSubscriptionsTable = """
+            CREATE TABLE $TABLE_SUBSCRIPTIONS (
+                $COL_SUB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_SUB_NAME TEXT,
+                $COL_SUB_AMOUNT REAL,
+                $COL_SUB_CYCLE TEXT,
+                $COL_SUB_RENEWAL INTEGER,
+                $COL_SUB_REMINDER INTEGER DEFAULT 1,
+                $COL_SUB_AUTO INTEGER DEFAULT 0
+            )
+        """.trimIndent()
+        db.execSQL(createSubscriptionsTable)
 
         var loadedPersonalRules = false
         val personalJson = BuildConfig.PERSONAL_RULES_JSON
@@ -177,6 +201,24 @@ class NovaDatabaseHelper(context: Context) :
         if (oldVersion < 2) {
             try {
                 db.execSQL("ALTER TABLE $TABLE_CARDS ADD COLUMN $COL_CFG_BILLING_CYCLE_DAY INTEGER DEFAULT 0")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        if (oldVersion < 3) {
+            try {
+                val createSubscriptionsTable = """
+                    CREATE TABLE IF NOT EXISTS $TABLE_SUBSCRIPTIONS (
+                        $COL_SUB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                        $COL_SUB_NAME TEXT,
+                        $COL_SUB_AMOUNT REAL,
+                        $COL_SUB_CYCLE TEXT,
+                        $COL_SUB_RENEWAL INTEGER,
+                        $COL_SUB_REMINDER INTEGER DEFAULT 1,
+                        $COL_SUB_AUTO INTEGER DEFAULT 0
+                    )
+                """.trimIndent()
+                db.execSQL(createSubscriptionsTable)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -562,6 +604,156 @@ class NovaDatabaseHelper(context: Context) :
             put(COL_CFG_KEYWORDS, keywords.lowercase())
         }
         return db.update(TABLE_ACCOUNTS, values, "$COL_CFG_ID = ?", arrayOf(id.toString())) > 0
+    }
+
+    // --- CRUD Subscriptions ---
+
+    @Synchronized
+    fun addSubscription(sub: Subscription): Boolean {
+        val db = this.writableDatabase
+        val values = ContentValues().apply {
+            put(COL_SUB_NAME, sub.name)
+            put(COL_SUB_AMOUNT, sub.amount)
+            put(COL_SUB_CYCLE, sub.billingCycle)
+            put(COL_SUB_RENEWAL, sub.nextRenewalDate)
+            put(COL_SUB_REMINDER, sub.isReminderEnabled)
+            put(COL_SUB_AUTO, sub.isAutoDetected)
+        }
+        val result = db.insert(TABLE_SUBSCRIPTIONS, null, values)
+        return result != -1L
+    }
+
+    @Synchronized
+    fun getAllSubscriptions(): List<Subscription> {
+        val list = mutableListOf<Subscription>()
+        val db = this.readableDatabase
+        val cursor = db.rawQuery("SELECT * FROM $TABLE_SUBSCRIPTIONS ORDER BY $COL_SUB_NAME ASC", null)
+        if (cursor.moveToFirst()) {
+            val idIdx = cursor.getColumnIndexOrThrow(COL_SUB_ID)
+            val nameIdx = cursor.getColumnIndexOrThrow(COL_SUB_NAME)
+            val amtIdx = cursor.getColumnIndexOrThrow(COL_SUB_AMOUNT)
+            val cycIdx = cursor.getColumnIndexOrThrow(COL_SUB_CYCLE)
+            val renIdx = cursor.getColumnIndexOrThrow(COL_SUB_RENEWAL)
+            val remIdx = cursor.getColumnIndexOrThrow(COL_SUB_REMINDER)
+            val autIdx = cursor.getColumnIndexOrThrow(COL_SUB_AUTO)
+            do {
+                list.add(
+                    Subscription(
+                        id = cursor.getLong(idIdx),
+                        name = cursor.getString(nameIdx),
+                        amount = cursor.getDouble(amtIdx),
+                        billingCycle = cursor.getString(cycIdx),
+                        nextRenewalDate = cursor.getLong(renIdx),
+                        isReminderEnabled = cursor.getInt(remIdx),
+                        isAutoDetected = cursor.getInt(autIdx)
+                    )
+                )
+            } while (cursor.moveToNext())
+        }
+        cursor.close()
+        return list
+    }
+
+    @Synchronized
+    fun deleteSubscription(id: Long) {
+        val db = this.writableDatabase
+        db.delete(TABLE_SUBSCRIPTIONS, "$COL_SUB_ID = ?", arrayOf(id.toString()))
+    }
+
+    @Synchronized
+    fun updateSubscription(sub: Subscription): Boolean {
+        val db = this.writableDatabase
+        val values = ContentValues().apply {
+            put(COL_SUB_NAME, sub.name)
+            put(COL_SUB_AMOUNT, sub.amount)
+            put(COL_SUB_CYCLE, sub.billingCycle)
+            put(COL_SUB_RENEWAL, sub.nextRenewalDate)
+            put(COL_SUB_REMINDER, sub.isReminderEnabled)
+            put(COL_SUB_AUTO, sub.isAutoDetected)
+        }
+        return db.update(TABLE_SUBSCRIPTIONS, values, "$COL_SUB_ID = ?", arrayOf(sub.id.toString())) > 0
+    }
+
+    @Synchronized
+    fun detectSubscriptions(): List<Subscription> {
+        val suggested = mutableListOf<Subscription>()
+        val allTx = getAllTransactions()
+        
+        // Group transactions by merchant name (case-insensitive)
+        val groupedByMerchant = allTx
+            .filter { it.merchant.trim().isNotEmpty() }
+            .groupBy { it.merchant.trim().lowercase() }
+
+        val activeSubs = getAllSubscriptions()
+        val existingNames = activeSubs.map { it.name.trim().lowercase() }.toSet()
+
+        val oneDayMs = 24 * 3600 * 1000L
+        val minInterval = 25 * oneDayMs
+        val maxInterval = 35 * oneDayMs
+
+        for ((merchantLower, txList) in groupedByMerchant) {
+            // Skip if the user is already tracking this subscription
+            if (existingNames.contains(merchantLower)) continue
+
+            // Sort transactions by timestamp ascending
+            val sortedTx = txList.sortedBy { it.timestamp }
+            if (sortedTx.size < 2) continue
+
+            // Look for matching consecutive pairs with similar amounts spaced by roughly a month
+            var isRecurring = false
+            var matchedAmount = 0.0
+            var lastTxTime = 0L
+
+            for (i in 0 until sortedTx.size - 1) {
+                val tx1 = sortedTx[i]
+                for (j in i + 1 until sortedTx.size) {
+                    val tx2 = sortedTx[j]
+                    val diffTime = tx2.timestamp - tx1.timestamp
+                    
+                    if (diffTime in minInterval..maxInterval) {
+                        val amtDiff = Math.abs(tx2.amount - tx1.amount)
+                        val maxAmtDiff = tx1.amount * 0.02 // 2% tolerance
+                        if (amtDiff <= maxAmtDiff) {
+                            isRecurring = true
+                            matchedAmount = tx2.amount
+                            lastTxTime = tx2.timestamp
+                            break
+                        }
+                    }
+                    if (diffTime > maxInterval) break
+                }
+                if (isRecurring) break
+            }
+
+            if (isRecurring) {
+                // Capitalize merchant name beautifully for display
+                val displayName = txList.first().merchant.trim()
+                
+                // Project next renewal date
+                val cal = java.util.Calendar.getInstance()
+                cal.timeInMillis = lastTxTime
+                
+                // If last tx time plus 1 month is in the past, roll forward until it is in the future!
+                do {
+                    cal.add(java.util.Calendar.MONTH, 1)
+                } while (cal.timeInMillis < System.currentTimeMillis())
+                
+                val projectedRenewal = cal.timeInMillis
+
+                suggested.add(
+                    Subscription(
+                        id = 0, // Suggestion, no db ID yet
+                        name = displayName,
+                        amount = matchedAmount,
+                        billingCycle = "Monthly",
+                        nextRenewalDate = projectedRenewal,
+                        isReminderEnabled = 1,
+                        isAutoDetected = 1 // Flag as auto-detected
+                    )
+                )
+            }
+        }
+        return suggested
     }
 }
 

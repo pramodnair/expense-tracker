@@ -48,6 +48,7 @@ import com.example.novabudget.data.BluetoothSyncManager
 import com.example.novabudget.data.CardConfig
 import com.example.novabudget.data.DefaultDataRepository
 import com.example.novabudget.data.Transaction
+import com.example.novabudget.data.Subscription
 import com.example.novabudget.data.SmsReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -572,6 +573,11 @@ fun DashboardScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewMo
 
         item {
             CashFlowForecastCard(data = data, viewModel = viewModel)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
+            SubscriptionDashboardCard(data = data, viewModel = viewModel)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -2826,7 +2832,7 @@ fun CashFlowForecastCard(
                                 showDialog = false
                                 Toast.makeText(context, "Forecast configurations saved!", Toast.LENGTH_SHORT).show()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryEmerald),
+                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryEmerald),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Save Configurations", color = Color.Black, fontWeight = FontWeight.Bold)
@@ -2837,4 +2843,459 @@ fun CashFlowForecastCard(
         }
     }
 }
+
+// --- FEATURE 2: SUBSCRIPTION MANAGER ---
+
+@Composable
+fun SubscriptionDashboardCard(data: MainScreenUiState.Success, viewModel: MainScreenViewModel) {
+    val currency = data.currencySymbol
+    val subscriptions = data.subscriptions
+    val suggestions = data.suggestedSubscriptions
+    val context = LocalContext.current
+
+    // Calculate total monthly overhead
+    val totalOverhead = subscriptions.sumOf { sub ->
+        if (sub.billingCycle.lowercase() == "yearly") {
+            sub.amount / 12.0
+        } else {
+            sub.amount
+        }
+    }
+
+    var isExpanded by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                Brush.linearGradient(listOf(Color(0xFF2C354A), Color(0xFF1E2332))),
+                RoundedCornerShape(24.dp)
+            )
+            .shadow(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = PrimaryEmerald,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "Subscriptions",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SlateWhite
+                        )
+                        Text(
+                            text = "Recurring bills & alerts",
+                            fontSize = 11.sp,
+                            color = SlateGray
+                        )
+                    }
+                }
+
+                // Total text
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "$currency ${formatMoney(totalOverhead)}/mo",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryEmerald
+                    )
+                    Text(
+                        text = "${subscriptions.size} tracked",
+                        fontSize = 10.sp,
+                        color = SlateGray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 1. Suggestions Area (if available)
+            if (suggestions.isNotEmpty()) {
+                Text(
+                    text = "POTENTIAL SUBSCRIPTIONS DETECTED",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AlertWarning,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                suggestions.forEach { sug ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = DarkBackground),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .border(1.dp, Color(0xFF3B2F1F), RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = sug.name,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SlateWhite
+                                )
+                                Text(
+                                    text = "Billed monthly: $currency ${formatMoney(sug.amount)}",
+                                    fontSize = 11.sp,
+                                    color = SlateGray
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    viewModel.confirmSuggestedSubscription(sug)
+                                    Toast.makeText(context, "Tracking ${sug.name}!", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.textButtonColors(contentColor = PrimaryEmerald),
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Text("Track", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // 2. Expand/Collapse toggle and List of Active Subscriptions
+            if (subscriptions.isNotEmpty()) {
+                TextButton(
+                    onClick = { isExpanded = !isExpanded },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = SlateWhite)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (isExpanded) "Hide Subscription Details" else "Show Tracking Details",
+                            fontSize = 12.sp
+                        )
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                if (isExpanded) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    subscriptions.forEach { sub ->
+                        val renewalText = remember(sub.nextRenewalDate) {
+                            val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.US)
+                            sdf.format(java.util.Date(sub.nextRenewalDate))
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF131722))
+                                .border(1.dp, Color(0xFF1E2332), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = sub.name,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SlateWhite
+                                )
+                                Text(
+                                    text = "Renews: $renewalText (${sub.billingCycle})",
+                                    fontSize = 11.sp,
+                                    color = SlateGray
+                                )
+                                Text(
+                                    text = "$currency ${formatMoney(sub.amount)}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = PrimaryEmerald
+                                )
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Alarm Alert Toggle
+                                Icon(
+                                    imageVector = if (sub.isReminderEnabled == 1) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                                    contentDescription = null,
+                                    tint = if (sub.isReminderEnabled == 1) PrimaryEmerald else SlateGray,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .clickable {
+                                            val updated = sub.copy(isReminderEnabled = if (sub.isReminderEnabled == 1) 0 else 1)
+                                            viewModel.updateSubscription(updated)
+                                            Toast.makeText(
+                                                context, 
+                                                if (updated.isReminderEnabled == 1) "Alarms enabled for ${sub.name}" else "Alarms disabled for ${sub.name}",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                )
+
+                                // Delete Button
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = AlertCrimson.copy(alpha = 0.8f),
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clickable {
+                                            viewModel.deleteSubscription(sub.id)
+                                            Toast.makeText(context, "Deleted tracking for ${sub.name}", Toast.LENGTH_SHORT).show()
+                                        }
+                                )
+                            }
+                        }
+                    }
+                }
+            } else if (suggestions.isEmpty()) {
+                // Empty state
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF131722), RoundedCornerShape(12.dp))
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No subscriptions tracked yet.\nScanner auto-detects recurring SMS spends!",
+                        fontSize = 12.sp,
+                        color = SlateGray,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Add Custom Subscription button
+            Button(
+                onClick = { showAddDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2638)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("Add Custom Subscription", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddSubscriptionDialog(
+            currencySymbol = currency,
+            onDismiss = { showAddDialog = false },
+            onSave = { name, amount, cycle, dayNumber ->
+                // Construct next occurrence date
+                val cal = java.util.Calendar.getInstance()
+                val currentDay = cal.get(java.util.Calendar.DAY_OF_MONTH)
+                if (currentDay > dayNumber) {
+                    cal.add(java.util.Calendar.MONTH, 1)
+                }
+                cal.set(java.util.Calendar.DAY_OF_MONTH, dayNumber)
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 9)
+                cal.set(java.util.Calendar.MINUTE, 0)
+                cal.set(java.util.Calendar.SECOND, 0)
+                cal.set(java.util.Calendar.MILLISECOND, 0)
+
+                viewModel.addSubscription(name, amount, cycle, cal.timeInMillis)
+                showAddDialog = false
+                Toast.makeText(context, "Added subscription to $name!", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+// Dialog for adding manual recurring subscriptions
+@Composable
+fun AddSubscriptionDialog(
+    currencySymbol: String,
+    onDismiss: () -> Unit,
+    onSave: (name: String, amount: Double, cycle: String, dayNumber: Int) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var amountStr by remember { mutableStateOf("") }
+    var cycle by remember { mutableStateOf("Monthly") }
+    var dayNumberStr by remember { mutableStateOf("1") }
+    
+    var cycleMenuExpanded by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF22283A), RoundedCornerShape(16.dp))
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "Add Subscription",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SlateWhite
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Subscription Name") },
+                    placeholder = { Text("Netflix, Spotify, Gym...") },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = DarkBackground,
+                        unfocusedContainerColor = DarkBackground,
+                        focusedIndicatorColor = PrimaryEmerald
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextField(
+                        value = amountStr,
+                        onValueChange = { amountStr = it },
+                        label = { Text("Amount ($currencySymbol)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = DarkBackground,
+                            unfocusedContainerColor = DarkBackground,
+                            focusedIndicatorColor = PrimaryEmerald
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    TextField(
+                        value = dayNumberStr,
+                        onValueChange = { dayNumberStr = it },
+                        label = { Text("Billing Day (1-28)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = DarkBackground,
+                            unfocusedContainerColor = DarkBackground,
+                            focusedIndicatorColor = PrimaryEmerald
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Cycle Selector (Frosted Dropdown Box)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { cycleMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SlateWhite),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.linearGradient(listOf(Color(0xFF2C354A), Color(0xFF1E2332))))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Billing Cycle: $cycle", fontSize = 14.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = cycleMenuExpanded,
+                        onDismissRequest = { cycleMenuExpanded = false },
+                        modifier = Modifier.background(DarkSurface)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Monthly", color = SlateWhite) },
+                            onClick = {
+                                cycle = "Monthly"
+                                cycleMenuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Yearly", color = SlateWhite) },
+                            onClick = {
+                                cycle = "Yearly"
+                                cycleMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel", color = SlateGray)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val amount = amountStr.toDoubleOrNull() ?: 0.0
+                            val day = dayNumberStr.toIntOrNull()?.coerceIn(1, 28) ?: 1
+                            if (name.trim().isNotEmpty() && amount > 0) {
+                                onSave(name.trim(), amount, cycle, day)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryEmerald),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Add", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
 

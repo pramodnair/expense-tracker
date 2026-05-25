@@ -124,4 +124,33 @@ class NotificationHelper(private val context: Context) {
             e.printStackTrace()
         }
     }
+
+    fun showSubscriptionRenewalAlert(name: String, amount: Double, currencySymbol: String) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val formattedAmount = String.format("%.2f", amount)
+        val contentText = "Your subscription to $name ($currencySymbol $formattedAmount) is renewing in 2 days!"
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("⏰ Subscription Renewal Alert")
+            .setContentText(contentText)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.notify(name.hashCode(), builder.build())
+        } catch (e: SecurityException) {
+            e.printStackTrace()
+        }
+    }
 }

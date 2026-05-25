@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.novabudget.data.AccountConfig
 import com.example.novabudget.data.CardConfig
 import com.example.novabudget.data.DefaultDataRepository
+import com.example.novabudget.data.Subscription
 import com.example.novabudget.data.Transaction
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,32 +21,44 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
         repository.currentMonthSpent,
         combine(
             combine(
-                repository.budgetLimit,
-                repository.currencySymbol,
-                repository.selectedMonth,
-                repository.distinctMonths
-            ) { limit, currency, selMonth, months ->
-                Quad(limit, currency, selMonth, months)
+                combine(
+                    repository.budgetLimit,
+                    repository.currencySymbol,
+                    repository.selectedMonth,
+                    repository.distinctMonths
+                ) { limit, currency, selMonth, months ->
+                    Quad(limit, currency, selMonth, months)
+                },
+                combine(
+                    repository.startingBalance,
+                    repository.monthlyIncome,
+                    repository.incomeDay
+                ) { startBal, income, day ->
+                    Triple(startBal, income, day)
+                }
+            ) { quad, trip ->
+                SettingsBundle(
+                    limit = quad.limit,
+                    currency = quad.currency,
+                    selectedMonth = quad.selectedMonth,
+                    distinctMonths = quad.distinctMonths,
+                    startingBalance = trip.first,
+                    monthlyIncome = trip.second,
+                    incomeDay = trip.third
+                )
             },
             combine(
-                repository.startingBalance,
-                repository.monthlyIncome,
-                repository.incomeDay
-            ) { startBal, income, day ->
-                Triple(startBal, income, day)
+                repository.subscriptions,
+                repository.suggestedSubscriptions
+            ) { subs, suggestions ->
+                Pair(subs, suggestions)
             }
-        ) { quad, trip ->
-            SettingsBundle(
-                limit = quad.limit,
-                currency = quad.currency,
-                selectedMonth = quad.selectedMonth,
-                distinctMonths = quad.distinctMonths,
-                startingBalance = trip.first,
-                monthlyIncome = trip.second,
-                incomeDay = trip.third
-            )
+        ) { bundle, subPair ->
+            Pair(bundle, subPair)
         }
-    ) { tx, cards, accounts, spent, bundle ->
+    ) { tx, cards, accounts, spent, bigBundle ->
+        val bundle = bigBundle.first
+        val subPair = bigBundle.second
         MainScreenUiState.Success(
             transactions = tx,
             cardConfigs = cards,
@@ -57,7 +70,9 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
             distinctMonths = bundle.distinctMonths,
             startingBalance = bundle.startingBalance,
             monthlyIncome = bundle.monthlyIncome,
-            incomeDay = bundle.incomeDay
+            incomeDay = bundle.incomeDay,
+            subscriptions = subPair.first,
+            suggestedSubscriptions = subPair.second
         )
     }.stateIn(
         scope = viewModelScope,
@@ -125,6 +140,31 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
         repository.updateAccountConfig(id, name, lastDigits, keywords)
     }
 
+    fun addSubscription(name: String, amount: Double, billingCycle: String, nextRenewalDate: Long) {
+        val sub = Subscription(
+            name = name,
+            amount = amount,
+            billingCycle = billingCycle,
+            nextRenewalDate = nextRenewalDate,
+            isReminderEnabled = 1,
+            isAutoDetected = 0
+        )
+        repository.addSubscription(sub)
+    }
+
+    fun confirmSuggestedSubscription(sub: Subscription) {
+        val confirmed = sub.copy(isAutoDetected = 0)
+        repository.addSubscription(confirmed)
+    }
+
+    fun deleteSubscription(id: Long) {
+        repository.deleteSubscription(id)
+    }
+
+    fun updateSubscription(sub: Subscription) {
+        repository.updateSubscription(sub)
+    }
+
     fun refresh() {
         repository.refresh()
     }
@@ -161,6 +201,8 @@ sealed interface MainScreenUiState {
         val distinctMonths: List<String>,
         val startingBalance: Double,
         val monthlyIncome: Double,
-        val incomeDay: Int
+        val incomeDay: Int,
+        val subscriptions: List<Subscription>,
+        val suggestedSubscriptions: List<Subscription>
     ) : MainScreenUiState
 }

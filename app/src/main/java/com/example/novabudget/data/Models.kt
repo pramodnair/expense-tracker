@@ -36,3 +36,15 @@ data class AccountConfig(
     val keywords: String
 )
 
+@Serializable
+data class Subscription(
+    val id: Long = 0,
+    val name: String,
+    val amount: Double,
+    val billingCycle: String, // "Monthly" or "Yearly"
+    val nextRenewalDate: Long, // timestamp
+    val isReminderEnabled: Int = 1,
+    val isAutoDetected: Int = 0
+)
+
+
