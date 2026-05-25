@@ -16,6 +16,10 @@ interface DataRepository {
     val budgetLimit: Flow<Float>
     val currencySymbol: Flow<String>
     
+    val monthlyIncome: Flow<Double>
+    val incomeDay: Flow<Int>
+    val startingBalance: Flow<Double>
+    
     // Reactive historical tracking
     val selectedMonth: Flow<String>
     val distinctMonths: Flow<List<String>>
@@ -32,6 +36,13 @@ interface DataRepository {
     fun setCurrency(curr: String)
     fun isSyncServerActive(): Boolean
     fun setSyncServerActive(active: Boolean)
+    
+    fun getStartingBalance(): Double
+    fun setStartingBalance(bal: Double)
+    fun getMonthlyIncome(): Double
+    fun setMonthlyIncome(income: Double)
+    fun getIncomeDay(): Int
+    fun setIncomeDay(day: Int)
     
     fun addCardConfig(name: String, lastDigits: String, keywords: String, billingCycleDay: Int = 0): Boolean
     fun deleteCardConfig(id: Long)
@@ -68,6 +79,15 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     private val _distinctMonths = MutableStateFlow<List<String>>(emptyList())
     override val distinctMonths: Flow<List<String>> = _distinctMonths.asStateFlow()
+
+    private val _startingBalance = MutableStateFlow(50000.0)
+    override val startingBalance: Flow<Double> = _startingBalance.asStateFlow()
+
+    private val _monthlyIncome = MutableStateFlow(100000.0)
+    override val monthlyIncome: Flow<Double> = _monthlyIncome.asStateFlow()
+
+    private val _incomeDay = MutableStateFlow(30)
+    override val incomeDay: Flow<Int> = _incomeDay.asStateFlow()
 
     companion object {
         @Volatile
@@ -120,6 +140,9 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         _currentMonthSpent.value = _transactions.value.sumOf { it.amount }
         _budgetLimit.value = dbHelper.getBudgetLimit()
         _currencySymbol.value = dbHelper.getCurrency()
+        _startingBalance.value = dbHelper.getStartingBalance()
+        _monthlyIncome.value = dbHelper.getMonthlyIncome()
+        _incomeDay.value = dbHelper.getIncomeDay()
 
         val monthsSet = mutableSetOf<String>()
         val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
@@ -171,6 +194,27 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override fun setSyncServerActive(active: Boolean) {
         dbHelper.setSyncServerActive(active)
+    }
+
+    override fun getStartingBalance(): Double = dbHelper.getStartingBalance()
+
+    override fun setStartingBalance(bal: Double) {
+        dbHelper.setStartingBalance(bal)
+        refresh()
+    }
+
+    override fun getMonthlyIncome(): Double = dbHelper.getMonthlyIncome()
+
+    override fun setMonthlyIncome(income: Double) {
+        dbHelper.setMonthlyIncome(income)
+        refresh()
+    }
+
+    override fun getIncomeDay(): Int = dbHelper.getIncomeDay()
+
+    override fun setIncomeDay(day: Int) {
+        dbHelper.setIncomeDay(day)
+        refresh()
     }
 
     override fun addCardConfig(name: String, lastDigits: String, keywords: String, billingCycleDay: Int): Boolean {

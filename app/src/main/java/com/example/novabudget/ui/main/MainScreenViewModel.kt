@@ -19,23 +19,45 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
         repository.accountConfigs,
         repository.currentMonthSpent,
         combine(
-            repository.budgetLimit,
-            repository.currencySymbol,
-            repository.selectedMonth,
-            repository.distinctMonths
-        ) { limit, currency, selMonth, months ->
-            Quad(limit, currency, selMonth, months)
+            combine(
+                repository.budgetLimit,
+                repository.currencySymbol,
+                repository.selectedMonth,
+                repository.distinctMonths
+            ) { limit, currency, selMonth, months ->
+                Quad(limit, currency, selMonth, months)
+            },
+            combine(
+                repository.startingBalance,
+                repository.monthlyIncome,
+                repository.incomeDay
+            ) { startBal, income, day ->
+                Triple(startBal, income, day)
+            }
+        ) { quad, trip ->
+            SettingsBundle(
+                limit = quad.limit,
+                currency = quad.currency,
+                selectedMonth = quad.selectedMonth,
+                distinctMonths = quad.distinctMonths,
+                startingBalance = trip.first,
+                monthlyIncome = trip.second,
+                incomeDay = trip.third
+            )
         }
-    ) { tx, cards, accounts, spent, quad ->
+    ) { tx, cards, accounts, spent, bundle ->
         MainScreenUiState.Success(
-            transactions = tx as List<Transaction>,
-            cardConfigs = cards as List<CardConfig>,
-            accountConfigs = accounts as List<AccountConfig>,
-            currentMonthSpent = spent as Double,
-            budgetLimit = quad.limit,
-            currencySymbol = quad.currency,
-            selectedMonth = quad.selectedMonth,
-            distinctMonths = quad.distinctMonths
+            transactions = tx,
+            cardConfigs = cards,
+            accountConfigs = accounts,
+            currentMonthSpent = spent,
+            budgetLimit = bundle.limit,
+            currencySymbol = bundle.currency,
+            selectedMonth = bundle.selectedMonth,
+            distinctMonths = bundle.distinctMonths,
+            startingBalance = bundle.startingBalance,
+            monthlyIncome = bundle.monthlyIncome,
+            incomeDay = bundle.incomeDay
         )
     }.stateIn(
         scope = viewModelScope,
@@ -49,6 +71,18 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
 
     fun setBudgetLimit(limit: Float) {
         repository.setBudgetLimit(limit)
+    }
+
+    fun setStartingBalance(bal: Double) {
+        repository.setStartingBalance(bal)
+    }
+
+    fun setMonthlyIncome(income: Double) {
+        repository.setMonthlyIncome(income)
+    }
+
+    fun setIncomeDay(day: Int) {
+        repository.setIncomeDay(day)
     }
 
     fun setCurrencySymbol(currency: String) {
@@ -104,6 +138,16 @@ private data class Quad(
     val distinctMonths: List<String>
 )
 
+private data class SettingsBundle(
+    val limit: Float,
+    val currency: String,
+    val selectedMonth: String,
+    val distinctMonths: List<String>,
+    val startingBalance: Double,
+    val monthlyIncome: Double,
+    val incomeDay: Int
+)
+
 sealed interface MainScreenUiState {
     object Loading : MainScreenUiState
     data class Success(
@@ -114,6 +158,9 @@ sealed interface MainScreenUiState {
         val budgetLimit: Float,
         val currencySymbol: String,
         val selectedMonth: String,
-        val distinctMonths: List<String>
+        val distinctMonths: List<String>,
+        val startingBalance: Double,
+        val monthlyIncome: Double,
+        val incomeDay: Int
     ) : MainScreenUiState
 }

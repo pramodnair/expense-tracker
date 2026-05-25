@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -566,6 +567,11 @@ fun DashboardScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewMo
                     modifier = Modifier.weight(1f)
                 )
             }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
+            CashFlowForecastCard(data = data, viewModel = viewModel)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -2414,3 +2420,421 @@ fun EditRuleDialog(
 private fun formatMoney(value: Double): String {
     return String.format("%,.2f", value)
 }
+
+data class CashFlowPoint(val dayLabel: String, val balance: Double)
+
+fun calculateCashFlowProjections(
+    transactions: List<Transaction>,
+    cardConfigs: List<CardConfig>,
+    startingBalance: Double,
+    monthlyIncome: Double,
+    salaryDay: Int
+): List<CashFlowPoint> {
+    val list = mutableListOf<CashFlowPoint>()
+    val cal = java.util.Calendar.getInstance()
+    val todayMs = cal.timeInMillis
+
+    // rolling average spend over last 30 days
+    val thirtyDaysAgo = todayMs - 30L * 24 * 60 * 60 * 1000
+    val recentTx = transactions.filter { it.timestamp >= thirtyDaysAgo }
+    val totalRecentSpend = recentTx.sumOf { it.amount }
+    val dailySpendEstimate = if (recentTx.isNotEmpty()) totalRecentSpend / 30.0 else 1000.0
+
+    var currentProjBalance = startingBalance
+    val sdf = java.text.SimpleDateFormat("dd MMM", java.util.Locale.US)
+
+    for (dayOffset in 0..30) {
+        val projCal = java.util.Calendar.getInstance().apply {
+            timeInMillis = todayMs
+            add(java.util.Calendar.DAY_OF_YEAR, dayOffset)
+        }
+        val projDay = projCal.get(java.util.Calendar.DAY_OF_MONTH)
+
+        if (dayOffset > 0) {
+            currentProjBalance -= dailySpendEstimate
+        }
+
+        if (projDay == salaryDay) {
+            currentProjBalance += monthlyIncome
+        }
+
+        // CC Payoff dates: cutoffDay + 15 days
+        for (card in cardConfigs) {
+            if (card.billingCycleDay > 0) {
+                val payoffDay = (card.billingCycleDay + 15)
+                val isPayoffToday = if (payoffDay > 30) {
+                    val wrappedPayoff = payoffDay - 30
+                    projDay == wrappedPayoff
+                } else {
+                    projDay == payoffDay
+                }
+
+                if (isPayoffToday) {
+                    val cardSpend = transactions.filter {
+                        (it.accountName == card.cardName || it.lastDigits == card.lastDigits)
+                    }.sumOf { it.amount }
+                    val statementDeduction = if (cardSpend > 0.0) cardSpend else 5000.0
+                    currentProjBalance -= statementDeduction
+                }
+            }
+        }
+
+        list.add(CashFlowPoint(sdf.format(projCal.time), currentProjBalance))
+    }
+    return list
+}
+
+@Composable
+fun CashFlowLineChart(
+    points: List<CashFlowPoint>,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    if (points.isEmpty()) return
+
+    val maxVal = points.maxOf { it.balance }.coerceAtLeast(10000.0)
+    val minVal = points.minOf { it.balance }.coerceAtMost(0.0)
+    val valRange = (maxVal - minVal).coerceAtLeast(1.0)
+
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val width = size.width
+            val height = size.height
+            val spacingX = width / (points.size - 1)
+
+            fun getY(balance: Double): Float {
+                val ratio = (balance - minVal) / valRange
+                return (height - (ratio * height)).toFloat()
+            }
+
+            if (minVal < 0.0 && maxVal > 0.0) {
+                val zeroY = getY(0.0)
+                drawLine(
+                    color = Color(0xFFEF4444).copy(alpha = 0.3f),
+                    start = androidx.compose.ui.geometry.Offset(0f, zeroY),
+                    end = androidx.compose.ui.geometry.Offset(width, zeroY),
+                    strokeWidth = 2f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                )
+            }
+
+            val linePath = Path()
+            val fillPath = Path()
+
+            points.forEachIndexed { idx, pt ->
+                val x = idx * spacingX
+                val y = getY(pt.balance)
+
+                if (idx == 0) {
+                    linePath.moveTo(x, y)
+                    fillPath.moveTo(x, height)
+                    fillPath.lineTo(x, y)
+                } else {
+                    linePath.lineTo(x, y)
+                    fillPath.lineTo(x, y)
+                }
+
+                if (idx == points.size - 1) {
+                    fillPath.lineTo(x, height)
+                    fillPath.close()
+                }
+            }
+
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF10B981).copy(alpha = 0.15f),
+                        Color.Transparent
+                    )
+                )
+            )
+
+            drawPath(
+                path = linePath,
+                brush = Brush.linearGradient(
+                    listOf(Color(0xFF10B981), Color(0xFF06B6D4))
+                ),
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+            )
+
+            val minPtIdx = points.indexOfFirst { it.balance == points.minOf { p -> p.balance } }
+            val maxPtIdx = points.indexOfFirst { it.balance == points.maxOf { p -> p.balance } }
+
+            listOf(0, points.size - 1, minPtIdx, maxPtIdx).distinct().forEach { idx ->
+                if (idx in points.indices) {
+                    val pt = points[idx]
+                    val x = idx * spacingX
+                    val y = getY(pt.balance)
+
+                    drawCircle(
+                        color = Color(0xFF121622),
+                        radius = 6.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                    drawCircle(
+                        brush = Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF06B6D4))),
+                        radius = 4.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(x, y)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CashFlowForecastCard(
+    data: MainScreenUiState.Success,
+    viewModel: MainScreenViewModel
+) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val currency = data.currencySymbol
+    val startingBalance = data.startingBalance
+    val monthlyIncome = data.monthlyIncome
+    val incomeDay = data.incomeDay
+
+    val points = remember(data.transactions, data.cardConfigs, startingBalance, monthlyIncome, incomeDay) {
+        calculateCashFlowProjections(
+            data.transactions,
+            data.cardConfigs,
+            startingBalance,
+            monthlyIncome,
+            incomeDay
+        )
+    }
+
+    val minBalance = points.minOf { it.balance }
+    val endBalance = points.lastOrNull()?.balance ?: startingBalance
+
+    val isAlert = minBalance < 0.0
+    val isWarning = !isAlert && minBalance < 10000.0
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                if (isAlert) Color(0xFFEF4444).copy(alpha = 0.5f) else if (isWarning) Color(0xFFF59E0B).copy(alpha = 0.5f) else Color(0xFF22283A),
+                RoundedCornerShape(24.dp)
+            )
+            .shadow(6.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = if (isAlert) AlertCrimson else if (isWarning) AlertWarning else PrimaryEmerald,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "30-DAY CASH FORECAST",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SlateWhite,
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+                    Text(
+                        text = "Predicted cash levels based on billing cycles.",
+                        fontSize = 10.sp,
+                        color = SlateGray
+                    )
+                }
+
+                IconButton(
+                    onClick = { showDialog = true },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Forecast Settings",
+                        tint = SlateGray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            CashFlowLineChart(
+                points = points,
+                currency = currency,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Today\n${currency} ${formatMoney(startingBalance)}",
+                    fontSize = 10.sp,
+                    color = SlateGray,
+                    textAlign = TextAlign.Start
+                )
+                Text(
+                    text = "Day 30\n${currency} ${formatMoney(endBalance)}",
+                    fontSize = 10.sp,
+                    color = if (endBalance < 0.0) AlertCrimson else PrimaryEmerald,
+                    textAlign = TextAlign.End
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color(0xFF22283A), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = if (isAlert) AlertCrimson.copy(alpha = 0.1f) else if (isWarning) AlertWarning.copy(alpha = 0.1f) else PrimaryEmerald.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column {
+                    Text(
+                        text = when {
+                            isAlert -> "🚨 Critical: Cash projected to run out!"
+                            isWarning -> "⚠️ Alert: Low balance projected before salary."
+                            else -> "🟢 Projected Cash Levels are Healthy"
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAlert) AlertCrimson else if (isWarning) AlertWarning else PrimaryEmerald
+                    )
+                    Text(
+                        text = when {
+                            isAlert -> "CC bill statements will push your balance negative (Min: ${currency} ${formatMoney(minBalance)})."
+                            isWarning -> "Estimated spend will dip balance below ₹10,000 threshold before your salary on day $incomeDay."
+                            else -> "Estimated payoff dates are well-cushioned by your ${currency} ${formatMoney(monthlyIncome)} salary."
+                        },
+                        fontSize = 10.sp,
+                        color = SlateGray
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDialog) {
+        var salaryStr by remember { mutableStateOf(monthlyIncome.toInt().toString()) }
+        var salaryDayStr by remember { mutableStateOf(incomeDay.toString()) }
+        var startingBalStr by remember { mutableStateOf(startingBalance.toInt().toString()) }
+
+        Dialog(onDismissRequest = { showDialog = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0xFF22283A), RoundedCornerShape(16.dp))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Forecast Settings",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SlateWhite
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TextField(
+                        value = startingBalStr,
+                        onValueChange = { startingBalStr = it },
+                        label = { Text("Starting Bank Account Balance") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = DarkBackground,
+                            unfocusedContainerColor = DarkBackground,
+                            focusedIndicatorColor = PrimaryEmerald
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextField(
+                            value = salaryStr,
+                            onValueChange = { salaryStr = it },
+                            label = { Text("Monthly Salary") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = DarkBackground,
+                                unfocusedContainerColor = DarkBackground,
+                                focusedIndicatorColor = PrimaryEmerald
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        TextField(
+                            value = salaryDayStr,
+                            onValueChange = { salaryDayStr = it },
+                            label = { Text("Salary Day (1-31)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = DarkBackground,
+                                unfocusedContainerColor = DarkBackground,
+                                focusedIndicatorColor = PrimaryEmerald
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showDialog = false }) {
+                            Text("Cancel", color = SlateGray)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val bal = startingBalStr.toDoubleOrNull() ?: 50000.0
+                                val salary = salaryStr.toDoubleOrNull() ?: 100000.0
+                                val day = salaryDayStr.toIntOrNull() ?: 30
+                                viewModel.setStartingBalance(bal)
+                                viewModel.setMonthlyIncome(salary)
+                                viewModel.setIncomeDay(day.coerceIn(1, 31))
+                                showDialog = false
+                                Toast.makeText(context, "Forecast configurations saved!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryEmerald),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Save Configurations", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

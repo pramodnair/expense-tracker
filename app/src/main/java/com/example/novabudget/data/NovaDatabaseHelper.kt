@@ -129,6 +129,31 @@ class NovaDatabaseHelper(context: Context) :
         prefs.edit().putBoolean("sync_server_active", active).apply()
     }
 
+    fun getStartingBalance(): Double {
+        return prefs.getFloat("starting_balance", 50000.0f).toDouble()
+    }
+
+    fun setStartingBalance(bal: Double) {
+        prefs.edit().putFloat("starting_balance", bal.toFloat()).apply()
+    }
+
+    fun getMonthlyIncome(): Double {
+        return prefs.getFloat("monthly_income", 100000.0f).toDouble()
+    }
+
+    fun setMonthlyIncome(income: Double) {
+        prefs.edit().putFloat("monthly_income", income.toFloat()).apply()
+    }
+
+    fun getIncomeDay(): Int {
+        return prefs.getInt("income_day", 30)
+    }
+
+    fun setIncomeDay(day: Int) {
+        prefs.edit().putInt("income_day", day).apply()
+    }
+
+
     // --- CRUD Transactions ---
 
     @Synchronized
