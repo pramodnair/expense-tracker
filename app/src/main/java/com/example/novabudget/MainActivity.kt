@@ -4,34 +4,70 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import com.example.novabudget.data.DefaultDataRepository
 import com.example.novabudget.theme.NovaBudgetTheme
+import com.example.novabudget.ui.main.LockScreen
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     companion object {
         private const val PERMISSION_REQUEST_CODE = 2001
     }
 
+    private lateinit var repository: DefaultDataRepository
+    private val isAppLocked = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        repository = DefaultDataRepository.getInstance(applicationContext)
+
+        // Lock immediately if security enabled when starting up
+        if (repository.isSecurityEnabled()) {
+            isAppLocked.value = true
+        }
+
+        // Lock when app is resumed/brought to foreground
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                if (repository.isSecurityEnabled()) {
+                    isAppLocked.value = true
+                }
+            }
+        })
 
         enableEdgeToEdge()
         setContent {
+            val locked by isAppLocked
             NovaBudgetTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainNavigation()
+                    if (locked) {
+                        LockScreen(
+                            masterPasscode = repository.getMasterPasscode(),
+                            decoyPasscode = repository.getDecoyPasscode(),
+                            onUnlock = { isDecoy ->
+                                repository.setStealthModeActive(isDecoy)
+                                isAppLocked.value = false
+                            }
+                        )
+                    } else {
+                        MainNavigation()
+                    }
                 }
             }
         }

@@ -275,6 +275,54 @@ class NovaDatabaseHelper(context: Context) :
         prefs.edit().putInt("income_day", day).apply()
     }
 
+    fun isSecurityEnabled(): Boolean {
+        return prefs.getBoolean("security_enabled", false)
+    }
+
+    fun setSecurityEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("security_enabled", enabled).apply()
+    }
+
+    fun getMasterPasscode(): String {
+        return prefs.getString("master_passcode", "") ?: ""
+    }
+
+    fun setMasterPasscode(code: String) {
+        prefs.edit().putString("master_passcode", code).apply()
+    }
+
+    fun getDecoyPasscode(): String {
+        return prefs.getString("decoy_passcode", "") ?: ""
+    }
+
+    fun setDecoyPasscode(code: String) {
+        prefs.edit().putString("decoy_passcode", code).apply()
+    }
+
+    fun getDecoyStartingBalance(): Double {
+        return prefs.getFloat("decoy_starting_balance", 75000.0f).toDouble()
+    }
+
+    fun setDecoyStartingBalance(bal: Double) {
+        prefs.edit().putFloat("decoy_starting_balance", bal.toFloat()).apply()
+    }
+
+    fun getDecoyMonthlyIncome(): Double {
+        return prefs.getFloat("decoy_monthly_income", 90000.0f).toDouble()
+    }
+
+    fun setDecoyMonthlyIncome(income: Double) {
+        prefs.edit().putFloat("decoy_monthly_income", income.toFloat()).apply()
+    }
+
+    fun getDecoyBudgetLimit(): Float {
+        return prefs.getFloat("decoy_budget_limit", 25000.0f)
+    }
+
+    fun setDecoyBudgetLimit(limit: Float) {
+        prefs.edit().putFloat("decoy_budget_limit", limit).apply()
+    }
+
 
     // --- CRUD Transactions ---
 

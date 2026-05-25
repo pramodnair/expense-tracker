@@ -27,6 +27,14 @@ interface DataRepository {
     val subscriptions: Flow<List<Subscription>>
     val suggestedSubscriptions: Flow<List<Subscription>>
 
+    val isSecurityEnabled: Flow<Boolean>
+    val masterPasscode: Flow<String>
+    val decoyPasscode: Flow<String>
+    val decoyStartingBalance: Flow<Double>
+    val decoyMonthlyIncome: Flow<Double>
+    val decoyBudgetLimit: Flow<Float>
+    val isStealthModeActive: Flow<Boolean>
+
     fun refresh()
     fun setSelectedMonth(yearMonth: String)
     fun addTransaction(tx: Transaction): Boolean
@@ -59,6 +67,20 @@ interface DataRepository {
     fun deleteSubscription(id: Long)
     fun updateSubscription(sub: Subscription): Boolean
     fun detectSubscriptions(): List<Subscription>
+
+    fun isSecurityEnabled(): Boolean
+    fun setSecurityEnabled(enabled: Boolean)
+    fun getMasterPasscode(): String
+    fun setMasterPasscode(code: String)
+    fun getDecoyPasscode(): String
+    fun setDecoyPasscode(code: String)
+    fun getDecoyStartingBalance(): Double
+    fun setDecoyStartingBalance(bal: Double)
+    fun getDecoyMonthlyIncome(): Double
+    fun setDecoyMonthlyIncome(income: Double)
+    fun getDecoyBudgetLimit(): Float
+    fun setDecoyBudgetLimit(limit: Float)
+    fun setStealthModeActive(active: Boolean)
 }
 
 class DefaultDataRepository(private val context: Context) : DataRepository {
@@ -103,6 +125,27 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     private val _suggestedSubscriptions = MutableStateFlow<List<Subscription>>(emptyList())
     override val suggestedSubscriptions: Flow<List<Subscription>> = _suggestedSubscriptions.asStateFlow()
 
+    private val _isSecurityEnabled = MutableStateFlow(false)
+    override val isSecurityEnabled: Flow<Boolean> = _isSecurityEnabled.asStateFlow()
+
+    private val _masterPasscode = MutableStateFlow("")
+    override val masterPasscode: Flow<String> = _masterPasscode.asStateFlow()
+
+    private val _decoyPasscode = MutableStateFlow("")
+    override val decoyPasscode: Flow<String> = _decoyPasscode.asStateFlow()
+
+    private val _decoyStartingBalance = MutableStateFlow(75000.0)
+    override val decoyStartingBalance: Flow<Double> = _decoyStartingBalance.asStateFlow()
+
+    private val _decoyMonthlyIncome = MutableStateFlow(90000.0)
+    override val decoyMonthlyIncome: Flow<Double> = _decoyMonthlyIncome.asStateFlow()
+
+    private val _decoyBudgetLimit = MutableStateFlow(25000.0f)
+    override val decoyBudgetLimit: Flow<Float> = _decoyBudgetLimit.asStateFlow()
+
+    private val _isStealthModeActive = MutableStateFlow(false)
+    override val isStealthModeActive: Flow<Boolean> = _isStealthModeActive.asStateFlow()
+
     companion object {
         @Volatile
         private var INSTANCE: DefaultDataRepository? = null
@@ -143,30 +186,168 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
         return sdf.format(Date(tx.timestamp))
     }
 
-    override fun refresh() {
-        val currentSelected = _selectedMonth.value
-        val allTx = dbHelper.getAllTransactions()
-        val cards = dbHelper.getAllCardConfigs()
-        
-        _cardConfigs.value = cards
-        _accountConfigs.value = dbHelper.getAllAccountConfigs()
-        _transactions.value = allTx.filter { getTransactionBudgetMonth(it, cards) == currentSelected }
-        _currentMonthSpent.value = _transactions.value.sumOf { it.amount }
-        _budgetLimit.value = dbHelper.getBudgetLimit()
-        _currencySymbol.value = dbHelper.getCurrency()
-        _startingBalance.value = dbHelper.getStartingBalance()
-        _monthlyIncome.value = dbHelper.getMonthlyIncome()
-        _incomeDay.value = dbHelper.getIncomeDay()
-        _subscriptions.value = dbHelper.getAllSubscriptions()
-        _suggestedSubscriptions.value = dbHelper.detectSubscriptions()
+    private val stealthManualTransactions = mutableListOf<Transaction>()
 
-        val monthsSet = mutableSetOf<String>()
+    private fun generateDecoyTransactions(selectedMonth: String): List<Transaction> {
+        val list = mutableListOf<Transaction>()
+        
         val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
-        monthsSet.add(sdf.format(Date()))
-        for (tx in allTx) {
-            monthsSet.add(getTransactionBudgetMonth(tx, cards))
+        val targetMonthDate = try {
+            sdf.parse(selectedMonth) ?: Date()
+        } catch (e: Exception) {
+            Date()
         }
-        _distinctMonths.value = monthsSet.sortedDescending()
+        
+        val cal = java.util.Calendar.getInstance()
+        cal.time = targetMonthDate
+        
+        // Mock 1: Swiggy
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 5)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 13)
+        cal.set(java.util.Calendar.MINUTE, 15)
+        list.add(
+            Transaction(
+                id = 9001,
+                amount = 250.0,
+                accountName = "Savings A/c",
+                lastDigits = "9999",
+                merchant = "Swiggy",
+                timestamp = cal.timeInMillis,
+                smsSender = "AXISBANK",
+                smsBody = "INR 250.00 debited from XX9999 on Swiggy",
+                isSynced = 1,
+                syncHash = "stealth_hash_1"
+            )
+        )
+        
+        // Mock 2: Uber
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 12)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 18)
+        cal.set(java.util.Calendar.MINUTE, 45)
+        list.add(
+            Transaction(
+                id = 9002,
+                amount = 380.0,
+                accountName = "Savings A/c",
+                lastDigits = "9999",
+                merchant = "Uber",
+                timestamp = cal.timeInMillis,
+                smsSender = "AXISBANK",
+                smsBody = "INR 380.00 debited from XX9999 on Uber",
+                isSynced = 1,
+                syncHash = "stealth_hash_2"
+            )
+        )
+        
+        // Mock 3: Netflix
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 15)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 9)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        list.add(
+            Transaction(
+                id = 9003,
+                amount = 199.0,
+                accountName = "Classic Credit Card",
+                lastDigits = "8888",
+                merchant = "Netflix",
+                timestamp = cal.timeInMillis,
+                smsSender = "ICICIBANK",
+                smsBody = "INR 199.00 spent on XX8888 on Netflix",
+                isSynced = 1,
+                syncHash = "stealth_hash_3"
+            )
+        )
+
+        // Mock 4: Reliance Digital
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 20)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 15)
+        cal.set(java.util.Calendar.MINUTE, 30)
+        list.add(
+            Transaction(
+                id = 9004,
+                amount = 2499.0,
+                accountName = "Classic Credit Card",
+                lastDigits = "8888",
+                merchant = "Reliance Digital",
+                timestamp = cal.timeInMillis,
+                smsSender = "ICICIBANK",
+                smsBody = "INR 2499.00 spent on XX8888 on Reliance Digital",
+                isSynced = 1,
+                syncHash = "stealth_hash_4"
+            )
+        )
+        
+        // Filter in-memory manual spends during stealth mode session
+        val filteredManual = stealthManualTransactions.filter { 
+            sdf.format(Date(it.timestamp)) == selectedMonth
+        }
+        list.addAll(filteredManual)
+        
+        return list.sortedByDescending { it.timestamp }
+    }
+
+    override fun refresh() {
+        // Load active security states
+        _isSecurityEnabled.value = dbHelper.isSecurityEnabled()
+        _masterPasscode.value = dbHelper.getMasterPasscode()
+        _decoyPasscode.value = dbHelper.getDecoyPasscode()
+        _decoyStartingBalance.value = dbHelper.getDecoyStartingBalance()
+        _decoyMonthlyIncome.value = dbHelper.getDecoyMonthlyIncome()
+        _decoyBudgetLimit.value = dbHelper.getDecoyBudgetLimit()
+
+        val currentSelected = _selectedMonth.value
+        val isStealth = _isStealthModeActive.value
+
+        if (isStealth) {
+            _cardConfigs.value = listOf(
+                CardConfig(1, "Classic Credit Card", "8888", "spent,charged", 0)
+            )
+            _accountConfigs.value = listOf(
+                AccountConfig(1, "Savings A/c", "9999", "debited")
+            )
+            val fakeTx = generateDecoyTransactions(currentSelected)
+            _transactions.value = fakeTx
+            _currentMonthSpent.value = fakeTx.sumOf { it.amount }
+            
+            _budgetLimit.value = dbHelper.getDecoyBudgetLimit()
+            _currencySymbol.value = dbHelper.getCurrency()
+            _startingBalance.value = dbHelper.getDecoyStartingBalance()
+            _monthlyIncome.value = dbHelper.getDecoyMonthlyIncome()
+            _incomeDay.value = dbHelper.getIncomeDay()
+
+            _subscriptions.value = listOf(
+                Subscription(1, "Netflix", 199.0, "Monthly", System.currentTimeMillis() + 5 * 24 * 3600 * 1000L, 1, 0)
+            )
+            _suggestedSubscriptions.value = emptyList()
+
+            val monthsSet = mutableSetOf<String>()
+            val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
+            monthsSet.add(sdf.format(Date()))
+            _distinctMonths.value = monthsSet.sortedDescending()
+        } else {
+            val allTx = dbHelper.getAllTransactions()
+            val cards = dbHelper.getAllCardConfigs()
+            
+            _cardConfigs.value = cards
+            _accountConfigs.value = dbHelper.getAllAccountConfigs()
+            _transactions.value = allTx.filter { getTransactionBudgetMonth(it, cards) == currentSelected }
+            _currentMonthSpent.value = _transactions.value.sumOf { it.amount }
+            _budgetLimit.value = dbHelper.getBudgetLimit()
+            _currencySymbol.value = dbHelper.getCurrency()
+            _startingBalance.value = dbHelper.getStartingBalance()
+            _monthlyIncome.value = dbHelper.getMonthlyIncome()
+            _incomeDay.value = dbHelper.getIncomeDay()
+            _subscriptions.value = dbHelper.getAllSubscriptions()
+            _suggestedSubscriptions.value = dbHelper.detectSubscriptions()
+
+            val monthsSet = mutableSetOf<String>()
+            val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
+            monthsSet.add(sdf.format(Date()))
+            for (tx in allTx) {
+                monthsSet.add(getTransactionBudgetMonth(tx, cards))
+            }
+            _distinctMonths.value = monthsSet.sortedDescending()
+        }
     }
 
     override fun setSelectedMonth(yearMonth: String) {
@@ -175,6 +356,12 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override fun addTransaction(tx: Transaction): Boolean {
+        if (_isStealthModeActive.value) {
+            val fakeTx = tx.copy(id = (10000 + stealthManualTransactions.size).toLong(), isSynced = 1)
+            stealthManualTransactions.add(fakeTx)
+            refresh()
+            return true
+        }
         val success = dbHelper.addTransaction(tx)
         if (success) {
             refresh()
@@ -183,6 +370,11 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
     }
 
     override fun deleteTransaction(id: Long) {
+        if (_isStealthModeActive.value) {
+            stealthManualTransactions.removeAll { it.id == id }
+            refresh()
+            return
+        }
         dbHelper.deleteTransaction(id)
         refresh()
     }
@@ -313,5 +505,56 @@ class DefaultDataRepository(private val context: Context) : DataRepository {
 
     override fun detectSubscriptions(): List<Subscription> {
         return dbHelper.detectSubscriptions()
+    }
+
+    override fun isSecurityEnabled(): Boolean = dbHelper.isSecurityEnabled()
+
+    override fun setSecurityEnabled(enabled: Boolean) {
+        dbHelper.setSecurityEnabled(enabled)
+        refresh()
+    }
+
+    override fun getMasterPasscode(): String = dbHelper.getMasterPasscode()
+
+    override fun setMasterPasscode(code: String) {
+        dbHelper.setMasterPasscode(code)
+        refresh()
+    }
+
+    override fun getDecoyPasscode(): String = dbHelper.getDecoyPasscode()
+
+    override fun setDecoyPasscode(code: String) {
+        dbHelper.setDecoyPasscode(code)
+        refresh()
+    }
+
+    override fun getDecoyStartingBalance(): Double = dbHelper.getDecoyStartingBalance()
+
+    override fun setDecoyStartingBalance(bal: Double) {
+        dbHelper.setDecoyStartingBalance(bal)
+        refresh()
+    }
+
+    override fun getDecoyMonthlyIncome(): Double = dbHelper.getDecoyMonthlyIncome()
+
+    override fun setDecoyMonthlyIncome(income: Double) {
+        dbHelper.setDecoyMonthlyIncome(income)
+        refresh()
+    }
+
+    override fun getDecoyBudgetLimit(): Float = dbHelper.getDecoyBudgetLimit()
+
+    override fun setDecoyBudgetLimit(limit: Float) {
+        dbHelper.setDecoyBudgetLimit(limit)
+        refresh()
+    }
+
+    override fun setStealthModeActive(active: Boolean) {
+        _isStealthModeActive.value = active
+        if (!active) {
+            // Clear manual spends added during stealth mode when exiting
+            stealthManualTransactions.clear()
+        }
+        refresh()
     }
 }

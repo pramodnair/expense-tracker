@@ -103,5 +103,8 @@ dependencies {
   // Compose Material Icons
   implementation("androidx.compose.material:material-icons-core")
   implementation("androidx.compose.material:material-icons-extended")
+
+  // Biometric authentication dependency
+  implementation(libs.androidx.biometric)
 }
 

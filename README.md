@@ -24,6 +24,9 @@ The application automatically parses banking and credit card transaction SMS not
 *   **📥 Retroactive Inbox SMS Importer**: Scans local inbox SMS messages retrospectively for the **last 6 months** or **last 1 year**, parsing and logging expenses that occurred before the app was installed while automatically deduplicating previously logged entries.
 *   **💳 Credit Card Billing Cycle Alignment**: Custom cutoff day configuration (1–28) per card. Any transaction made after the statement cutoff day is dynamically shifted in-memory to the next calendar month's budget to align perfectly with salary payoff schedules.
 *   **🛡️ Smart CC Payment Exclusions**: Advanced parser filters that automatically identify bank account debits representing credit card bill payments (e.g., matching keywords like `"CC Payment"`, `"Card Pymt"`, `"Amazon Pay Credit C"`, `"credit card"`). These internal transfers are excluded from monthly spent calculations, avoiding budget double-counting.
+*   **🔑 Biometric Lock & Stealth Mode**: Dynamic dual-defense local privacy lock system:
+    *   *Secure Biometric / Master Passcode Unlock*: Shows a beautiful frosted glass 3x4 passcode entry screen with incorrect input shake animations, interactive dots, and native biometric overlay integration, unlocking the real expense records.
+    *   *Silent Stealth Mode*: Entering a custom decoy passcode (different from the master PIN) unlocks the app silently, displaying a completely simulated "Stealth Mode" decoy dashboard with fake starting balances, simulated salaries, low mock spends, and clean card configurations, keeping actual database logs completely hidden.
 *   **🎨 Premium Dark Slate & Emerald Aesthetics**: A beautiful obsidian dark-mode interface with floating glassmorphism cards, glowing emerald progress rings, and responsive transition micro-animations. Features a canvas-drawn native vector shield logo.
 
 ---
@@ -67,6 +70,8 @@ graph TD
     *   Combines flows from the `DefaultDataRepository` (transactions, configs, budget limits, active months) into a unified, read-only `MainScreenUiState.Success` stream using nested state flows.
 6.  **`MainScreen.kt` (UI Presentation Layer)**:
     *   Constructs 4 distinct screens (Dashboard, Expenses, Rules, and P2P Sync) using modern Material 3 Compose layouts, optimized with glassmorphic cards, custom canvas widgets, and dynamic responsive states.
+7.  **`LockScreen.kt` (Secure Overlay)**:
+    *   Constructs a full-screen, high-security lock screen overlay with vector branding, shake feedback animations, circular numeric keys, and interactive passcode indicators. Interacts directly with the system `BiometricPrompt` framework.
 
 ---
 
@@ -131,3 +136,17 @@ NovaBudget comes pre-populated with default configurations for out-of-the-box ev
 2.  Launch NovaBudget on both phones. Go to the **Sync** tab (4th tab), and select your spouse's paired device from the list.
 3.  Simulate a debit SMS on Phone A.
 4.  **Result**: Phone A will automatically parse the SMS, open a silent background Bluetooth socket connection to Phone B, and merge the transaction records. Phone B will receive and display a local system notification detailing the success.
+
+### 4. Verification of Biometric Lock & Stealth Mode
+1.  Open the app and navigate to the **Rules** tab (3rd tab). Scroll down and expand the **Security & Stealth Mode Settings** card.
+2.  Toggle **Enable App Lock** to ON.
+3.  Configure a 4-digit **Master PIN** (e.g. `2580`) and a 4-digit **Decoy PIN** (e.g. `1212`) (they must be different).
+4.  Configure customized decoy settings: Starting Balance = `75000.0`, Monthly Salary = `90000.0`, Budget Limit = `25000.0`. Tap **Save Security Settings**.
+5.  Close the app completely and reopen it.
+6.  **Result**: The app will display a glowing brand shield and a 3x4 passcode grid instantly, preventing access to the dashboard.
+7.  Enter the incorrect PIN `1111`. Verify that the dots turn crimson and perform a horizontal shake animation.
+8.  Enter your Master PIN `2580`. The app will unlock immediately showing your real ICICI/Axis transactional data.
+9.  Minimize the app to the background, wait 3 seconds, and resume it.
+10. **Result**: The LockScreen overlay appears instantly upon resume to protect your financial privacy.
+11. Enter the Decoy PIN `1212`. The app will unlock silently without any warning banners or indicators.
+12. Go to the Dashboard and Expenses tabs. Verify that your real transactions are fully hidden, and only your custom decoy balance (₹75,000) and mock low spends (Swiggy, Uber, Netflix, Reliance Digital) are displayed.

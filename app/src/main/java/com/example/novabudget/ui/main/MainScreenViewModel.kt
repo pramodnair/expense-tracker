@@ -52,13 +52,37 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
                 repository.suggestedSubscriptions
             ) { subs, suggestions ->
                 Pair(subs, suggestions)
+            },
+            combine(
+                repository.isSecurityEnabled,
+                repository.masterPasscode,
+                repository.decoyPasscode,
+                combine(
+                    repository.decoyStartingBalance,
+                    repository.decoyMonthlyIncome,
+                    repository.decoyBudgetLimit,
+                    repository.isStealthModeActive
+                ) { decoyBal, decoySalary, decoyLimit, stealthActive ->
+                    DecoyStats(decoyBal, decoySalary, decoyLimit, stealthActive)
+                }
+            ) { securityOn, masterPin, decoyPin, decoyStats ->
+                SecurityBundle(
+                    isSecurityEnabled = securityOn,
+                    masterPasscode = masterPin,
+                    decoyPasscode = decoyPin,
+                    decoyStartingBalance = decoyStats.decoyStartingBalance,
+                    decoyMonthlyIncome = decoyStats.decoyMonthlyIncome,
+                    decoyBudgetLimit = decoyStats.decoyBudgetLimit,
+                    isStealthModeActive = decoyStats.isStealthModeActive
+                )
             }
-        ) { bundle, subPair ->
-            Pair(bundle, subPair)
+        ) { bundle, subPair, secBundle ->
+            Triple(bundle, subPair, secBundle)
         }
     ) { tx, cards, accounts, spent, bigBundle ->
         val bundle = bigBundle.first
         val subPair = bigBundle.second
+        val secBundle = bigBundle.third
         MainScreenUiState.Success(
             transactions = tx,
             cardConfigs = cards,
@@ -72,7 +96,14 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
             monthlyIncome = bundle.monthlyIncome,
             incomeDay = bundle.incomeDay,
             subscriptions = subPair.first,
-            suggestedSubscriptions = subPair.second
+            suggestedSubscriptions = subPair.second,
+            isSecurityEnabled = secBundle.isSecurityEnabled,
+            masterPasscode = secBundle.masterPasscode,
+            decoyPasscode = secBundle.decoyPasscode,
+            decoyStartingBalance = secBundle.decoyStartingBalance,
+            decoyMonthlyIncome = secBundle.decoyMonthlyIncome,
+            decoyBudgetLimit = secBundle.decoyBudgetLimit,
+            isStealthModeActive = secBundle.isStealthModeActive
         )
     }.stateIn(
         scope = viewModelScope,
@@ -165,6 +196,34 @@ class MainScreenViewModel(private val repository: DefaultDataRepository) : ViewM
         repository.updateSubscription(sub)
     }
 
+    fun setSecurityEnabled(enabled: Boolean) {
+        repository.setSecurityEnabled(enabled)
+    }
+
+    fun setMasterPasscode(code: String) {
+        repository.setMasterPasscode(code)
+    }
+
+    fun setDecoyPasscode(code: String) {
+        repository.setDecoyPasscode(code)
+    }
+
+    fun setDecoyStartingBalance(bal: Double) {
+        repository.setDecoyStartingBalance(bal)
+    }
+
+    fun setDecoyMonthlyIncome(income: Double) {
+        repository.setDecoyMonthlyIncome(income)
+    }
+
+    fun setDecoyBudgetLimit(limit: Float) {
+        repository.setDecoyBudgetLimit(limit)
+    }
+
+    fun setStealthModeActive(active: Boolean) {
+        repository.setStealthModeActive(active)
+    }
+
     fun refresh() {
         repository.refresh()
     }
@@ -188,6 +247,23 @@ private data class SettingsBundle(
     val incomeDay: Int
 )
 
+private data class DecoyStats(
+    val decoyStartingBalance: Double,
+    val decoyMonthlyIncome: Double,
+    val decoyBudgetLimit: Float,
+    val isStealthModeActive: Boolean
+)
+
+private data class SecurityBundle(
+    val isSecurityEnabled: Boolean,
+    val masterPasscode: String,
+    val decoyPasscode: String,
+    val decoyStartingBalance: Double,
+    val decoyMonthlyIncome: Double,
+    val decoyBudgetLimit: Float,
+    val isStealthModeActive: Boolean
+)
+
 sealed interface MainScreenUiState {
     object Loading : MainScreenUiState
     data class Success(
@@ -203,6 +279,14 @@ sealed interface MainScreenUiState {
         val monthlyIncome: Double,
         val incomeDay: Int,
         val subscriptions: List<Subscription>,
-        val suggestedSubscriptions: List<Subscription>
+        val suggestedSubscriptions: List<Subscription>,
+        
+        val isSecurityEnabled: Boolean,
+        val masterPasscode: String,
+        val decoyPasscode: String,
+        val decoyStartingBalance: Double,
+        val decoyMonthlyIncome: Double,
+        val decoyBudgetLimit: Float,
+        val isStealthModeActive: Boolean
     ) : MainScreenUiState
 }

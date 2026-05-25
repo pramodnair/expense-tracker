@@ -1650,6 +1650,242 @@ fun ConfigScreen(data: MainScreenUiState.Success, viewModel: MainScreenViewModel
                 }
             }
         }
+
+        // Section 4: Security & Stealth Mode
+        item {
+            var isSecurityExpanded by remember { mutableStateOf(false) }
+            
+            var masterPinInput by remember { mutableStateOf(data.masterPasscode) }
+            var decoyPinInput by remember { mutableStateOf(data.decoyPasscode) }
+            
+            var decoyBalanceInput by remember { mutableStateOf(data.decoyStartingBalance.toString()) }
+            var decoySalaryInput by remember { mutableStateOf(data.decoyMonthlyIncome.toString()) }
+            var decoyLimitInput by remember { mutableStateOf(data.decoyBudgetLimit.toString()) }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0xFF22283A), RoundedCornerShape(16.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = PrimaryEmerald)
+                            Column {
+                                Text(
+                                    text = "Security & Stealth Mode",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SlateWhite
+                                )
+                                Text(
+                                    text = "App locking & decoy profiles",
+                                    fontSize = 11.sp,
+                                    color = SlateGray
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = { isSecurityExpanded = !isSecurityExpanded }) {
+                            Icon(
+                                imageVector = if (isSecurityExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = SlateGray
+                            )
+                        }
+                    }
+
+                    if (isSecurityExpanded) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // App Lock Toggle Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF131722), RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Enable App Lock",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SlateWhite
+                                )
+                                Text(
+                                    text = "Locks app on startup or resume",
+                                    fontSize = 11.sp,
+                                    color = SlateGray
+                                )
+                            }
+                            Switch(
+                                checked = data.isSecurityEnabled,
+                                onCheckedChange = { 
+                                    if (data.masterPasscode.length != 4 || data.decoyPasscode.length != 4) {
+                                        Toast.makeText(context, "Please set 4-digit Master & Decoy PINs first!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        viewModel.setSecurityEnabled(it)
+                                        Toast.makeText(context, if (it) "App Lock Activated!" else "App Lock Deactivated", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = PrimaryEmerald,
+                                    checkedTrackColor = PrimaryEmerald.copy(alpha = 0.4f)
+                                )
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Passcodes Setup Section
+                        Text(
+                            text = "PASSCODES CONFIGURATION",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryEmerald,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = masterPinInput,
+                                onValueChange = { if (it.length <= 4) masterPinInput = it },
+                                label = { Text("Master PIN (4 digits)") },
+                                placeholder = { Text("2580") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = DarkBackground,
+                                    unfocusedContainerColor = DarkBackground,
+                                    focusedIndicatorColor = PrimaryEmerald
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            TextField(
+                                value = decoyPinInput,
+                                onValueChange = { if (it.length <= 4) decoyPinInput = it },
+                                label = { Text("Decoy PIN (4 digits)") },
+                                placeholder = { Text("1212") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = DarkBackground,
+                                    unfocusedContainerColor = DarkBackground,
+                                    focusedIndicatorColor = PrimaryEmerald
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Decoy Settings Section
+                        Text(
+                            text = "STEALTH PROFILE METRICS (DECOY PROFILE)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AlertWarning,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextField(
+                            value = decoyBalanceInput,
+                            onValueChange = { decoyBalanceInput = it },
+                            label = { Text("Decoy Balance (${data.currencySymbol})") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = DarkBackground,
+                                unfocusedContainerColor = DarkBackground,
+                                focusedIndicatorColor = PrimaryEmerald
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextField(
+                                value = decoySalaryInput,
+                                onValueChange = { decoySalaryInput = it },
+                                label = { Text("Decoy Income") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = DarkBackground,
+                                    unfocusedContainerColor = DarkBackground,
+                                    focusedIndicatorColor = PrimaryEmerald
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            TextField(
+                                value = decoyLimitInput,
+                                onValueChange = { decoyLimitInput = it },
+                                label = { Text("Decoy Limit") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = DarkBackground,
+                                    unfocusedContainerColor = DarkBackground,
+                                    focusedIndicatorColor = PrimaryEmerald
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Save security changes button
+                        Button(
+                            onClick = {
+                                if (masterPinInput.length != 4 || decoyPinInput.length != 4) {
+                                    Toast.makeText(context, "PINs must be exactly 4 digits!", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                if (masterPinInput == decoyPinInput) {
+                                    Toast.makeText(context, "Master and Decoy PINs must be different!", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                
+                                val bal = decoyBalanceInput.toDoubleOrNull() ?: 75000.0
+                                val salary = decoySalaryInput.toDoubleOrNull() ?: 90000.0
+                                val limit = decoyLimitInput.toFloatOrNull() ?: 25000.0f
+                                
+                                viewModel.setMasterPasscode(masterPinInput)
+                                viewModel.setDecoyPasscode(decoyPinInput)
+                                viewModel.setDecoyStartingBalance(bal)
+                                viewModel.setDecoyMonthlyIncome(salary)
+                                viewModel.setDecoyBudgetLimit(limit)
+                                
+                                Toast.makeText(context, "Security & Decoy profiles saved!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryEmerald),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                        ) {
+                            Text("Save Security Configuration", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // --- FEATURE 3 EDIT DIALOGS ---
