@@ -80,7 +80,7 @@ graph TD
 ### Local Configuration
 1.  Clone the repository to your local machine:
     ```bash
-    git clone https://github.com/pramodnair/expense-tracker.git
+    git clone https://github.com/yourusername/expense-tracker.git
     cd expense-tracker
     ```
 2.  Open the project in **Android Studio**.
@@ -109,19 +109,19 @@ You can compile and build the Android application binaries directly using the bu
 ## 📲 Manual Verification Instructions
 
 NovaBudget comes pre-populated with default configurations for out-of-the-box evaluation matching standard transaction formats:
-*   **Pre-configured Card**: Last digits `6005`, keywords `spent,debited,charged`, billing cutoff `0` (calendar month).
-*   **Pre-configured Bank Account**: Last digits `9202`, keywords `debited`.
+*   **Pre-configured Card**: Last digits `1234` (labeled `Dummy Credit Card`), keywords `spent,debited,charged`, billing cutoff `0` (calendar month).
+*   **Pre-configured Bank Account**: Last digits `5678` (labeled `Dummy Bank Account`), keywords `debited`.
 
 ### 1. Verification of Payment Exclusions (Double-Counting)
 1.  Open the app. Go to **Dashboard** and set your budget limit to ₹50,000.
 2.  Simulate/receive a bank account debit SMS representing a credit card payment:
-    > `"INR 36638.52 debited A/c no. XX9202 on 31-01-26, 19:28:53 UPI/P2M/603115236116/Amazon Pay Credit C Axis Bank"`
+    > `"INR 36638.52 debited A/c no. XX5678 on 31-01-26, 19:28:53 UPI/P2M/603115236116/Amazon Pay Credit C Dummy Bank"`
 3.  **Result**: The parser will match `"Amazon Pay Credit C"`, identify it as a credit card payment exclusion, and discard it. Verify that the transaction is ignored (it will **not** appear in your expenses list or inflate your total monthly spent).
 
 ### 2. Verification of Credit Card Billing Cycles
 1.  Go to the **Rules** tab (3rd tab).
-2.  Locate *ICICI Credit Card (Ends in 6005)*, tap the **Edit Pen icon**, set the **Billing Cutoff Day** to `18`, and tap **Save Changes**.
-3.  Navigate to the **Expenses** tab and add a manual transaction for **April 20th** for ₹500 using *ICICI Credit Card*.
+2.  Locate *Dummy Credit Card (Ends in 1234)*, tap the **Edit Pen icon**, set the **Billing Cutoff Day** to `18`, and tap **Save Changes**.
+3.  Navigate to the **Expenses** tab and add a manual transaction for **April 20th** for ₹500 using *Dummy Credit Card*.
 4.  Navigate back to the **Dashboard** (1st tab), and select the month **May 2026** in the top-right month dropdown.
 5.  **Result**: Because April 20th is past the billing cutoff day of 18, the ₹500 spend has been automatically shifted to May's budget! Verify that it appears under the May 2026 statement spent.
 6.  Add another transaction on **April 15th** for ₹300. Select **April 2026** in the dropdown. Verify that this transaction remains counted under April's budget.
