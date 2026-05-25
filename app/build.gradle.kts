@@ -14,6 +14,19 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        // Inject local personal rules if the file exists locally
+        val rulesFile = rootProject.file("local_personal_rules.json")
+        val rulesJson = if (rulesFile.exists()) {
+            rulesFile.readText()
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "")
+                .replace("\r", "")
+        } else {
+            ""
+        }
+        buildConfigField("String", "PERSONAL_RULES_JSON", "\"$rulesJson\"")
     }
 
     buildTypes {
@@ -30,7 +43,7 @@ android {
     buildFeatures {
       compose = true
       aidl = false
-      buildConfig = false
+      buildConfig = true
       shaders = false
     }
 

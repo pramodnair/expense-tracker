@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.util.Calendar
+import com.example.novabudget.BuildConfig
 
 class NovaDatabaseHelper(context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -81,16 +82,52 @@ class NovaDatabaseHelper(context: Context) :
         """.trimIndent()
         db.execSQL(createAccountsTable)
 
-        // Insert some default configs for out-of-the-box usability!
-        db.execSQL("""
-            INSERT INTO $TABLE_CARDS ($COL_CFG_NAME, $COL_CFG_LAST_DIGITS, $COL_CFG_KEYWORDS, $COL_CFG_BILLING_CYCLE_DAY) 
-            VALUES ('Dummy Credit Card', '1234', 'spent,debited,charged', 0)
-        """.trimIndent())
+        var loadedPersonalRules = false
+        val personalJson = BuildConfig.PERSONAL_RULES_JSON
+        if (personalJson.isNotEmpty()) {
+            try {
+                val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                val rules = json.decodeFromString<PersonalRules>(personalJson)
+                
+                for (card in rules.cards) {
+                    val values = ContentValues().apply {
+                        put(COL_CFG_NAME, card.cardName)
+                        put(COL_CFG_LAST_DIGITS, card.lastDigits)
+                        put(COL_CFG_KEYWORDS, card.keywords.lowercase())
+                        put(COL_CFG_BILLING_CYCLE_DAY, card.billingCycleDay)
+                    }
+                    db.insert(TABLE_CARDS, null, values)
+                }
 
-        db.execSQL("""
-            INSERT INTO $TABLE_ACCOUNTS ($COL_CFG_NAME, $COL_CFG_LAST_DIGITS, $COL_CFG_KEYWORDS) 
-            VALUES ('Dummy Bank Account', '5678', 'debited')
-        """.trimIndent())
+                for (acc in rules.accounts) {
+                    val values = ContentValues().apply {
+                        put(COL_CFG_NAME, acc.accountName)
+                        put(COL_CFG_LAST_DIGITS, acc.lastDigits)
+                        put(COL_CFG_KEYWORDS, acc.keywords.lowercase())
+                    }
+                    db.insert(TABLE_ACCOUNTS, null, values)
+                }
+                
+                if (rules.cards.isNotEmpty() || rules.accounts.isNotEmpty()) {
+                    loadedPersonalRules = true
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        if (!loadedPersonalRules) {
+            // Insert some default configs for out-of-the-box usability!
+            db.execSQL("""
+                INSERT INTO $TABLE_CARDS ($COL_CFG_NAME, $COL_CFG_LAST_DIGITS, $COL_CFG_KEYWORDS, $COL_CFG_BILLING_CYCLE_DAY) 
+                VALUES ('Dummy Credit Card', '1234', 'spent,debited,charged', 0)
+            """.trimIndent())
+
+            db.execSQL("""
+                INSERT INTO $TABLE_ACCOUNTS ($COL_CFG_NAME, $COL_CFG_LAST_DIGITS, $COL_CFG_KEYWORDS) 
+                VALUES ('Dummy Bank Account', '5678', 'debited')
+            """.trimIndent())
+        }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -484,3 +521,9 @@ class NovaDatabaseHelper(context: Context) :
         return db.update(TABLE_ACCOUNTS, values, "$COL_CFG_ID = ?", arrayOf(id.toString())) > 0
     }
 }
+
+@kotlinx.serialization.Serializable
+private data class PersonalRules(
+    val cards: List<CardConfig> = emptyList(),
+    val accounts: List<AccountConfig> = emptyList()
+)
