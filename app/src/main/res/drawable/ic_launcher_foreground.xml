@@ -1,0 +1,38 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Scale down and center perfectly within the 72dp safe zone -->
+    <group
+        android:pivotX="54"
+        android:pivotY="55"
+        android:scaleX="0.75"
+        android:scaleY="0.75"
+        android:translateX="0"
+        android:translateY="-1">
+        
+        <!-- Premium Contrast Outer Shield (Dark Slate-Obsidian) -->
+        <path
+            android:pathData="M54,18 C77,21.5 83.5,37 80,64.5 C74.5,82.5 54,92 54,92 C54,92 33.5,82.5 28,64.5 C24.5,37 31,21.5 54,18 Z"
+            android:fillColor="#121622"
+            android:strokeWidth="3.5"
+            android:strokeColor="#1A1F30" />
+            
+        <!-- Glowing Cyan/Teal Accent Inner Shield Stroke -->
+        <path
+            android:pathData="M54,23 C73,26 78,39 75,62.5 C70,77.5 54,85.5 54,85.5 C54,85.5 38,77.5 33,62.5 C30,39 35,26 54,23 Z"
+            android:strokeWidth="1.5"
+            android:strokeColor="#06B6D4" />
+            
+        <!-- Futuristic Pure White Letter N inside Shield -->
+        <path
+            android:pathData="M44,63 L44,45 L64,63 L64,45"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="5"
+            android:strokeColor="#FFFFFF" />
+            
+    </group>
+</vector>
